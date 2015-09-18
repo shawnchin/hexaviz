@@ -25,11 +25,14 @@ Example usage:
         m.add_component('A', needs_ports=['n1', 'n2'])
         m.add_component('B', provides_ports=['p1', 'p2'])
         m.add_component('C', needs_ports=['nX'])
-        m.add_component('D', provides_ports=['pX'])
+        m.add_component('D', needs_ports=['data'], provides_ports=['pX'])
 
         m.add_connection('A', 'n1', 'B', 'p1')
         m.add_connection('A', 'n2', 'D', 'pX')
         m.add_connection('C', 'nX', 'B', 'p2')
+
+        m.add_resource('Resource X')
+        m.add_connection_to_resource('D', 'data', 'Resource X')
 
         print render_mesh_as_dot(m)
 
@@ -47,7 +50,7 @@ The output can then be visualised using Graphviz dot to produce and output that 
             _____________   |  |      _____________
            |      C      |  |  |     |      D      |
            |-------------|  |  |     |-------------|
-           |      |  nX  |--+  +---->|  pX  |      |
+           |      |  nX  |--+  +---->|  pX  | data |------->[  Resource X  ]
            |______|______|           |______|______|
 
 """
@@ -79,6 +82,11 @@ class InvalidConnection(Exception):
     """
 
 
+class InvalidResource(Exception):
+    """Raised when there is an attempt to create an invalid resource in the mesh.
+    """
+
+
 class Mesh(object):
     """Light-weight representation of a hexagonal mesh that can drive template renderers (e.g. jinja2) to
     produce a textual representation of the mesh.
@@ -89,6 +97,7 @@ class Mesh(object):
     def __init__(self):
         self.components = OrderedDict()
         self.connections = []
+        self.resources = []
         self.connected_consumers = set()
 
     def add_component(self, component_name, needs_ports=None, provides_ports=None):
@@ -111,6 +120,17 @@ class Mesh(object):
         provides = provides_ports or tuple()
         for port_name in provides:
             self.add_provides_port(component_name, port_name)
+
+    def add_resource(self, resource_name):
+        """Adds a resource (adapter to external data) to the mesh.
+
+        :param str resource_name: Name of resource to add
+        :raises: DuplicateEntry if component of that name already exists
+        """
+        if resource_name in self.resources:
+            raise DuplicateEntry('Resource with name {0} already exists'.format(resource_name))
+
+        self.resources.append(resource_name)
 
     def add_needs_port(self, component_name, port_name):
         """Assigns an additional needs port to an existing component.
@@ -157,17 +177,42 @@ class Mesh(object):
         self.connections.append(ConnectionNode(consumer, producer))
         self.connected_consumers.add(consumer)
 
+    def add_connection_to_resource(self, consumer_component, consumer_port, resource):
+        """Adds a connection between a needs port from a consumer component to a resource.
+
+        :param str consumer_component: name of the consumer component
+        :param str consumer_port: name of the needs port of the consumer
+        :param str resource: name of resource
+        """
+        try:
+            self.components[consumer_component].assert_is_valid_needs_port(consumer_port)
+        except KeyError:
+            raise InvalidComponent('{0} component does not exist in the mesh'.format(consumer_component))
+
+        if resource not in self.resources:
+            raise InvalidResource('{0} resource does not exist in the mesh'.format(resource))
+
+        consumer = consumer_component, consumer_port
+        connection = ResourceConnectionNode(consumer, resource)
+
+        if consumer in self.connected_consumers:
+            raise InvalidConnection('{0} already connected'.format(consumer))
+
+        self.connections.append(connection)
+        self.connected_consumers.add(consumer)
+
     def as_dict(self):
         """Returns a dict representation of the mesh.
         """
         return {
             'components': [c.as_dict() for c in self.components.values()],
             'connections': [c.as_dict() for c in self.connections],
+            'resources': [r for r in self.resources],
         }
 
 
 class ConnectionNode(object):
-    """Internal representation of a connection within the mesh.
+    """Internal representation of a connection between components within the mesh.
     """
     def __init__(self, consumer, producer):
         """Instantiates a new connection between the given consumer and producer.
@@ -175,17 +220,33 @@ class ConnectionNode(object):
         :param tuple consumer: consumer of the connection defined as (consumer_component, consumer_port)
         :param tuple producer: producer of the connection defined as (producer_component, producerport)
         """
-        self.consumer_component, self.consumer_port = consumer
-        self.producer_component, self.producer_port = producer
+        self.consumer = consumer
+        self.producer = producer
 
     def as_dict(self):
-        """Returns a dict representation of the component.
+        """Returns a dict representation of the connection.
         """
+        self.consumer_component, self.consumer_port = self.consumer
+        self.producer_component, self.producer_port = self.producer
         return {
             'consumer_component': self.consumer_component,
             'consumer_port': self.consumer_port,
             'producer_component': self.producer_component,
             'producer_port': self.producer_port,
+        }
+
+
+class ResourceConnectionNode(ConnectionNode):
+    """Internal representation of a connection between components and resources within the mesh.
+    """
+    def as_dict(self):
+        """Returns a dict representation of the connection.
+        """
+        self.consumer_component, self.consumer_port = self.consumer
+        return {
+            'consumer_component': self.consumer_component,
+            'consumer_port': self.consumer_port,
+            'resource': self.producer,
         }
 
 
@@ -273,6 +334,8 @@ def render_mesh_as_dot(mesh):
 
     custom_filters = {
         'hash': lambda s: "id" + hashlib.md5(s).hexdigest()[:6],
+        # alternative hash for provides ports to avoid conflicts with needs ports with same name
+        'hash_p': lambda s: "idp" + hashlib.md5(s).hexdigest()[:6],
         'escape': lambda s: re.sub(r'([{}|"<>])', r'\\\1', s),
     }
 
@@ -286,7 +349,7 @@ def render_mesh_as_dot(mesh):
             {{ component.name|hash }} [label="{{ component.name|escape }} | {
                 {
                     {% for port in component.provides_ports %}
-                    <{{ port|hash }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
+                    <{{ port|hash_p }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
                     {% endfor %}
                 }|{
                     {% for port in component.needs_ports %}
@@ -296,8 +359,16 @@ def render_mesh_as_dot(mesh):
             }"];
             {% endfor %}
 
+            {% for resource in resources %}
+            {{ resource|hash }} [label="{{ resource }}", shape="cds"];
+            {% endfor %}
+
             {% for conn in connections %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }};
+            {% if "resource" in conn %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash }};
+            {% else %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }};
+            {% endif %}
             {% endfor %}
         }
     ''').lstrip()

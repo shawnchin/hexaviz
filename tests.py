@@ -22,8 +22,8 @@ import json
 import unittest
 import textwrap
 
-from hexavis import Mesh, render, render_mesh_as_dot
-from hexavis import DuplicateEntry, InvalidComponent, InvalidPort, InvalidConnection
+from hexaviz import Mesh, render, render_mesh_as_dot
+from hexaviz import DuplicateEntry, InvalidComponent, InvalidPort, InvalidConnection, InvalidResource
 
 
 class MeshTest(unittest.TestCase):
@@ -36,7 +36,7 @@ class MeshTest(unittest.TestCase):
         data = m.as_dict()
 
         # THEN a valid empty representation is returned
-        self.assertEqual({'components': [], 'connections': []}, data)
+        self.assertEqual({'components': [], 'connections': [], 'resources': []}, data)
 
     def test_added_component_can_be_retrieved_from_mesh(self):
         # GIVEN a new Mesh instance
@@ -50,6 +50,7 @@ class MeshTest(unittest.TestCase):
             'components': [
                 {'name': 'Component A', 'needs_ports': [], 'provides_ports': []},
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -69,6 +70,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'Component Z', 'needs_ports': [], 'provides_ports': []},
                 {'name': 'Component M', 'needs_ports': [], 'provides_ports': []},
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -100,6 +102,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': []
                 },
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -120,6 +123,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': ['provides 1']
                 },
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -139,6 +143,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': []
                 },
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -158,6 +163,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': ['provides 1', 'provides 2'],
                 },
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -181,6 +187,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': ['provides 8', 'provides 7', 'provides 1'],
                 },
             ],
+            'resources': [],
             'connections': [],
         }, m.as_dict())
 
@@ -233,6 +240,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
                 {'name': 'B', 'needs_ports': [], 'provides_ports': ['p1']},
             ],
+            'resources': [],
             'connections': [
                 {
                     'consumer_component': 'A',
@@ -290,6 +298,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'B', 'needs_ports': [], 'provides_ports': ['p1']},
                 {'name': 'C', 'needs_ports': ['nX'], 'provides_ports': []},
             ],
+            'resources': [],
             'connections': [
                 {
                     'consumer_component': 'A',
@@ -360,6 +369,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'C', 'needs_ports': ['nX'], 'provides_ports': []},
                 {'name': 'D', 'needs_ports': [], 'provides_ports': ['pX']},
             ],
+            'resources': [],
             'connections': [
                 {
                     'consumer_component': 'A',
@@ -492,6 +502,212 @@ class MeshTest(unittest.TestCase):
         with self.assertRaises(InvalidConnection):
             m.add_connection('A', 'n1', 'D', 'pX')
 
+    def test_added_resource_can_be_retrieved_from_mesh(self):
+        # GIVEN a new Mesh instance
+        m = Mesh()
+
+        # WHEN I add a resource
+        m.add_resource('Resource X')
+
+        # THEN that resource is represented in the output
+        self.assertEqual({
+            'components': [],
+            'resources': ['Resource X'],
+            'connections': [],
+        }, m.as_dict())
+
+    def test_resources_are_returned_in_the_order_they_were_added(self):
+        # GIVEN a new Mesh instance
+        m = Mesh()
+
+        # WHEN I add several resources
+        m.add_resource('Resource X')
+        m.add_resource('Resource Z')
+        m.add_resource('Resource Y')
+
+        # THEN that resources are presented in the order they were added
+        self.assertEqual({
+            'components': [],
+            'resources': ['Resource X', 'Resource Z', 'Resource Y'],
+            'connections': [],
+        }, m.as_dict())
+
+    def test_DuplicateEntry_exception_raised_when_adding_resources_with_same_name(self):
+        # GIVEN a Mesh with existing resource
+        m = Mesh()
+        m.add_resource('Resource X')
+
+        # WHEN we attempt to add a resource with the same name
+        # THEN a DuplicateEntry exception is raised
+        with self.assertRaises(DuplicateEntry):
+            m.add_resource('Resource X')
+
+    def test_adding_connection_from_port_to_edge_resource(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |            [ Resource X ]
+        #    |______|______|
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_resource('Resource X')
+
+        # WHEN we connect A:n1 to Resource X
+        m.add_connection_to_resource('A', 'n1', 'Resource X')
+
+        # THEN we get the following mesh representation
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |--------->[ Resource X ]
+        #    |______|______|
+        #
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+            ],
+            'resources': ['Resource X'],
+            'connections': [
+                {
+                    'consumer_component': 'A',
+                    'consumer_port': 'n1',
+                    'resource': 'Resource X',
+                },
+            ],
+        }, m.as_dict())
+
+    def test_InvalidComponent_exception_raised_when_creating_connections_to_resource_with_invalid_consumer_component(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |            [ Resource X ]
+        #    |______|______|
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_resource('Resource X')
+
+        # WHEN creating a component between X:n1 and Resource X
+        # THEN an InvalidComponent exception is raised
+        with self.assertRaises(InvalidComponent):
+            m.add_connection_to_resource('X', 'n1', 'Resource X')
+
+    def test_InvalidPort_exception_raised_when_creating_connections_to_resource_with_invalid_consumer_port(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |            [ Resource X ]
+        #    |______|______|
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_resource('Resource X')
+
+        # WHEN creating a component between A:nX and Resource X
+        # THEN an InvalidPort exception is raised
+        with self.assertRaises(InvalidPort):
+            m.add_connection_to_resource('A', 'nX', 'Resource X')
+
+    def test_InvalidResource_exception_raised_when_creating_connections_to_resource_that_does_not_exist(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |            [ Resource X ]
+        #    |______|______|
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_resource('Resource X')
+
+        # WHEN creating a component between A:n1 and Resource P
+        # THEN an InvalidResource exception is raised
+        with self.assertRaises(InvalidResource):
+            m.add_connection_to_resource('A', 'n1', 'Resource P')
+
+    def test_DuplicateEntry_exception_raised_when_connecting_already_connected_port_to_a_resource(self):
+        # GIVEN the following mesh
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |      |
+        #    |______|______|         |______|______|
+        #
+        #
+        #                             [ Resource X ]
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+
+        # WHEN attempting to create the following invalid connections
+        #     _____________             _____________
+        #    |      A      |           |      B      |
+        #    |-------------|           |-------------|
+        #    |      |  n1  |----+----->|  p1  |      |
+        #    |______|______|    |      |______|______|
+        #                       |
+        #                    INVALID
+        #                       |
+        #                       |
+        #                       +----->[ Resource X ]
+        #
+        #
+        # THEN an InvalidConnection exception is raised
+        with self.assertRaises(InvalidConnection):
+            m.add_connection_to_resource('A', 'n1', 'Resource X')
+
+    def test_DuplicateEntry_exception_raised_when_adding_connection_to_port_already_connected_to_resource(self):
+        # GIVEN the following mesh
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |-------->[ Resource X ]
+        #    |______|______|
+        #
+        #                             _____________
+        #                            |      D      |
+        #                            |-------------|
+        #                            |  pX  |      |
+        #                            |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('D', provides_ports=['pX'])
+        m.add_resource('Resource X')
+        m.add_connection_to_resource('A', 'n1', 'Resource X')
+
+        # WHEN attempting to create the following invalid connections
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |----+----->[ Resource X ]
+        #    |______|______|    |
+        #                       |
+        #                    INVALID    _____________
+        #                       |      |      D      |
+        #                       |      |-------------|
+        #                       +----->|  pX  |      |
+        #                              |______|______|
+        #
+        # THEN an InvalidConnection exception is raised
+        with self.assertRaises(InvalidConnection):
+            m.add_connection('A', 'n1', 'D', 'pX')
+
 
 class RenderTest(unittest.TestCase):
 
@@ -511,13 +727,23 @@ class RenderTest(unittest.TestCase):
                 {% endfor %}
             ],
 
+            "resources" : [
+                {% if resources %}
+                "{{ resources|join('", "') }}"
+                {% endif %}
+            ],
+
             "connections": [
                 {% for connection in connections %}
                 {
                     "consumer_component": "{{ connection.consumer_component }}",
                     "consumer_port": "{{ connection.consumer_port }}",
+                    {% if "resource" in connection %}
+                    "resource": "{{ connection.resource }}"
+                    {% else %}
                     "producer_component": "{{ connection.producer_component }}",
                     "producer_port": "{{ connection.producer_port }}"
+                    {% endif %}
                 }{% if not loop.last %},{% endif %}
                 {% endfor %}
             ]
@@ -533,7 +759,7 @@ class RenderTest(unittest.TestCase):
 
         # THEN the rendered output reflects that of an empty mesh
         out_data = json.loads(out)
-        self.assertEqual({'components': [], 'connections': []}, out_data)
+        self.assertEqual({'components': [], 'connections': [], 'resources': []}, out_data)
 
     def test_textual_representation_can_be_rendered_for_a_populated_mesh(self):
         # GIVEN the following mesh
@@ -542,7 +768,7 @@ class RenderTest(unittest.TestCase):
         #    |      A      |            |      B      |
         #    |-------------|            |-------------|
         #    |      |  n1  |----------->|  p1  |      |
-        #    |      |______|            |______|      |
+        #    |      |______|            |______|  nY  |----->[ Resource Y ]
         #    |      |  n2  |-----+  +-->|  p2  |      |
         #    |______|______|     |  |   |______|______|
         #                     +- | -+
@@ -550,18 +776,22 @@ class RenderTest(unittest.TestCase):
         #     _____________   |  |      _____________
         #    |      C      |  |  |     |      D      |
         #    |-------------|  |  |     |-------------|
-        #    |      |  nX  |--+  +---->|  pX  |      |
+        #    |      |  nX  |--+  +---->|  pX  |  nX  |------>[ Resource X ]
         #    |______|______|           |______|______|
         #
         m = Mesh()
         m.add_component('A', needs_ports=['n1', 'n2'])
-        m.add_component('B', provides_ports=['p1', 'p2'])
+        m.add_component('B', provides_ports=['p1', 'p2'], needs_ports=['nY'])
         m.add_component('C', needs_ports=['nX'])
-        m.add_component('D', provides_ports=['pX'])
+        m.add_component('D', provides_ports=['pX'], needs_ports=['nX'])
+        m.add_resource('Resource X')
+        m.add_resource('Resource Y')
 
         m.add_connection('A', 'n1', 'B', 'p1')
         m.add_connection('A', 'n2', 'D', 'pX')
         m.add_connection('C', 'nX', 'B', 'p2')
+        m.add_connection_to_resource('D', 'nX', 'Resource X')
+        m.add_connection_to_resource('B', 'nY', 'Resource Y')
 
         # WHEN the textual representation is rendered
         out = render(m, self.JSON_TEMPLATE)
@@ -571,10 +801,11 @@ class RenderTest(unittest.TestCase):
         self.assertEqual({
             'components': [
                 {'name': 'A', 'needs_ports': ['n1', 'n2'], 'provides_ports': []},
-                {'name': 'B', 'needs_ports': [], 'provides_ports': ['p1', 'p2']},
+                {'name': 'B', 'needs_ports': ['nY'], 'provides_ports': ['p1', 'p2']},
                 {'name': 'C', 'needs_ports': ['nX'], 'provides_ports': []},
-                {'name': 'D', 'needs_ports': [], 'provides_ports': ['pX']},
+                {'name': 'D', 'needs_ports': ['nX'], 'provides_ports': ['pX']},
             ],
+            'resources': ['Resource X', 'Resource Y'],
             'connections': [
                 {
                     'consumer_component': 'A',
@@ -593,6 +824,16 @@ class RenderTest(unittest.TestCase):
                     'consumer_port': 'nX',
                     'producer_component': 'B',
                     'producer_port': 'p2',
+                },
+                {
+                    'consumer_component': 'D',
+                    'consumer_port': 'nX',
+                    'resource': 'Resource X',
+                },
+                {
+                    'consumer_component': 'B',
+                    'consumer_port': 'nY',
+                    'resource': 'Resource Y',
                 },
             ],
         }, out_data)
