@@ -273,6 +273,8 @@ def render_mesh_as_dot(mesh):
 
     custom_filters = {
         'hash': lambda s: "id" + hashlib.md5(s).hexdigest()[:6],
+        # alternative hash for provides ports to avoid conflicts with needs ports with same name
+        'hash_p': lambda s: "idp" + hashlib.md5(s).hexdigest()[:6],
         'escape': lambda s: re.sub(r'([{}|"<>])', r'\\\1', s),
     }
 
@@ -286,7 +288,7 @@ def render_mesh_as_dot(mesh):
             {{ component.name|hash }} [label="{{ component.name|escape }} | {
                 {
                     {% for port in component.provides_ports %}
-                    <{{ port|hash }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
+                    <{{ port|hash_p }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
                     {% endfor %}
                 }|{
                     {% for port in component.needs_ports %}
@@ -297,7 +299,7 @@ def render_mesh_as_dot(mesh):
             {% endfor %}
 
             {% for conn in connections %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }};
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }};
             {% endfor %}
         }
     ''').lstrip()
