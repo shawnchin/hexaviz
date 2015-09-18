@@ -22,8 +22,8 @@ import json
 import unittest
 import textwrap
 
-from hexavis import Mesh, render, render_mesh_as_dot
-from hexavis import DuplicateEntry, InvalidComponent, InvalidPort, InvalidConnection
+from hexaviz import Mesh, render, render_mesh_as_dot
+from hexaviz import DuplicateEntry, InvalidComponent, InvalidPort, InvalidConnection
 
 
 class MeshTest(unittest.TestCase):
