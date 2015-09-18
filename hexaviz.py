@@ -25,11 +25,14 @@ Example usage:
         m.add_component('A', needs_ports=['n1', 'n2'])
         m.add_component('B', provides_ports=['p1', 'p2'])
         m.add_component('C', needs_ports=['nX'])
-        m.add_component('D', provides_ports=['pX'])
+        m.add_component('D', needs_ports=['data'], provides_ports=['pX'])
 
         m.add_connection('A', 'n1', 'B', 'p1')
         m.add_connection('A', 'n2', 'D', 'pX')
         m.add_connection('C', 'nX', 'B', 'p2')
+
+        m.add_resource('Resource X')
+        m.add_connection_to_resource('D', 'data', 'Resource X')
 
         print render_mesh_as_dot(m)
 
@@ -47,7 +50,7 @@ The output can then be visualised using Graphviz dot to produce and output that 
             _____________   |  |      _____________
            |      C      |  |  |     |      D      |
            |-------------|  |  |     |-------------|
-           |      |  nX  |--+  +---->|  pX  |      |
+           |      |  nX  |--+  +---->|  pX  | data |------->[  Resource X  ]
            |______|______|           |______|______|
 
 """
@@ -356,8 +359,16 @@ def render_mesh_as_dot(mesh):
             }"];
             {% endfor %}
 
+            {% for resource in resources %}
+            {{ resource|hash }} [label="{{ resource }}", shape="cds"];
+            {% endfor %}
+
             {% for conn in connections %}
+            {% if "resource" in conn %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash }};
+            {% else %}
             {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }};
+            {% endif %}
             {% endfor %}
         }
     ''').lstrip()
