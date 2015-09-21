@@ -20,24 +20,31 @@
 """
 Example usage:
 
+        # Crete a mesh (collection of connected components)
         m = Mesh()
 
+        # Add components (hexagons) to the mesh, each with a set of 'needs' ports (output ports) and
+        # and 'provides' ports (input ports)
         m.add_component('A', needs_ports=['n1', 'n2'])
         m.add_component('B', provides_ports=['p1', 'p2'])
         m.add_component('C', needs_ports=['nX'])
         m.add_component('D', needs_ports=['data'], provides_ports=['pX'])
 
+        # Add pass-through adapters to connect ports between components
         m.add_connection('A', 'n1', 'B', 'p1')
         m.add_connection('A', 'n2', 'D', 'pX')
         m.add_connection('C', 'nX', 'B', 'p2')
 
+        # Define an external adapter and attach it to a 'needs' port
         m.add_resource('Resource X')
         m.add_connection_to_resource('D', 'data', 'Resource X')
 
+        # Render as a Graphviz dot file
         print render_mesh_as_dot(m)
 
 
-The output can then be visualised using Graphviz dot to produce and output that akin to:
+When visualised using Graphviz, this should produce an output that looks like:
+
             _____________              _____________
            |      A      |            |      B      |
            |-------------|            |-------------|
