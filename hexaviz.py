@@ -225,7 +225,7 @@ class ConnectionNode(object):
         """Instantiates a new connection between the given consumer and producer.
 
         :param tuple consumer: consumer of the connection defined as (consumer_component, consumer_port)
-        :param tuple producer: producer of the connection defined as (producer_component, producerport)
+        :param tuple producer: producer of the connection defined as (producer_component, producer_port)
         """
         self.consumer = consumer
         self.producer = producer
