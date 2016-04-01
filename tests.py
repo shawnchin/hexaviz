@@ -81,8 +81,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN we attempt to add a component with the same name
         # THEN a DuplicateEntry exception is raised
-        with self.assertRaises(DuplicateEntry):
-            m.add_component('Component A')
+        self.assertRaises(DuplicateEntry, m.add_component, 'Component A')
 
     def test_adding_needs_port_to_existing_component(self):
         # GIVEN a Mesh with existing component
@@ -197,8 +196,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN we attempt to add an existing needs port to the component
         # THEN a DuplicateEntry exception is raised
-        with self.assertRaises(DuplicateEntry):
-            m.add_needs_port('Component A', 'needs 1')
+        self.assertRaises(DuplicateEntry, m.add_needs_port, 'Component A', 'needs 1')
 
     def test_DuplicateEntry_exception_raised_when_adding_provides_port_with_same_name(self):
         # GIVEN a Mesh with existing components that has needs and provides
@@ -207,8 +205,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN we attempt to add an existing provides port to the component
         # THEN a DuplicateEntry exception is raised
-        with self.assertRaises(DuplicateEntry):
-            m.add_provides_port('Component A', 'provides 1')
+        self.assertRaises(DuplicateEntry, m.add_provides_port, 'Component A', 'provides 1')
 
     def test_adding_connection_between_two_ports(self):
         # GIVEN the following components
@@ -406,8 +403,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between X:n1 and B:p1
         # THEN an InvalidComponent exception is raised
-        with self.assertRaises(InvalidComponent):
-            m.add_connection('X', 'n1', 'B', 'p1')
+        self.assertRaises(InvalidComponent, m.add_connection, 'X', 'n1', 'B', 'p1')
 
     def test_InvalidComponent_exception_raised_when_creating_connections_with_invalid_producer_component(self):
         # GIVEN the following components
@@ -424,8 +420,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between A:n1 and X:p1
         # THEN an InvalidComponent exception is raised
-        with self.assertRaises(InvalidComponent):
-            m.add_connection('A', 'n1', 'X', 'p1')
+        self.assertRaises(InvalidComponent, m.add_connection, 'A', 'n1', 'X', 'p1')
 
     def test_InvalidPort_exception_raised_when_creating_connections_with_invalid_consumer_port(self):
         # GIVEN the following components
@@ -442,8 +437,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between A:p1 and B:p1
         # THEN an InvalidPort exception is raised
-        with self.assertRaises(InvalidPort):
-            m.add_connection('A', 'p1', 'B', 'p1')
+        self.assertRaises(InvalidPort, m.add_connection, 'A', 'p1', 'B', 'p1')
 
     def test_InvalidPort_exception_raised_when_creating_connections_with_invalid_producer_port(self):
         # GIVEN the following components
@@ -460,8 +454,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between A:n1 and B:n1
         # THEN an InvalidPort exception is raised
-        with self.assertRaises(InvalidPort):
-            m.add_connection('A', 'n1', 'B', 'n1')
+        self.assertRaises(InvalidPort, m.add_connection, 'A', 'n1', 'B', 'n1')
 
     def test_DuplicateEntry_exception_raised_when_assigning_multiple_connections_to_the_same_needs_port(self):
         # GIVEN the following mesh
@@ -498,8 +491,7 @@ class MeshTest(unittest.TestCase):
         #                              |______|______|
         #
         # THEN an InvalidConnection exception is raised
-        with self.assertRaises(InvalidConnection):
-            m.add_connection('A', 'n1', 'D', 'pX')
+        self.assertRaises(InvalidConnection, m.add_connection, 'A', 'n1', 'D', 'pX')
 
     def test_added_resource_can_be_retrieved_from_mesh(self):
         # GIVEN a new Mesh instance
@@ -538,8 +530,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN we attempt to add a resource with the same name
         # THEN a DuplicateEntry exception is raised
-        with self.assertRaises(DuplicateEntry):
-            m.add_resource('Resource X')
+        self.assertRaises(DuplicateEntry, m.add_resource, 'Resource X')
 
     def test_adding_connection_from_port_to_edge_resource(self):
         # GIVEN a mesh with the following component and resource
@@ -594,8 +585,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between X:n1 and Resource X
         # THEN an InvalidComponent exception is raised
-        with self.assertRaises(InvalidComponent):
-            m.add_connection_to_resource('X', 'n1', 'Resource X')
+        self.assertRaises(InvalidComponent, m.add_connection_to_resource, 'X', 'n1', 'Resource X')
 
     def test_InvalidPort_exception_raised_when_creating_connections_to_resource_with_invalid_consumer_port(self):
         # GIVEN a mesh with the following component and resource
@@ -612,8 +602,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between A:nX and Resource X
         # THEN an InvalidPort exception is raised
-        with self.assertRaises(InvalidPort):
-            m.add_connection_to_resource('A', 'nX', 'Resource X')
+        self.assertRaises(InvalidPort, m.add_connection_to_resource, 'A', 'nX', 'Resource X')
 
     def test_InvalidResource_exception_raised_when_creating_connections_to_resource_that_does_not_exist(self):
         # GIVEN a mesh with the following component and resource
@@ -630,8 +619,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN creating a component between A:n1 and Resource P
         # THEN an InvalidResource exception is raised
-        with self.assertRaises(InvalidResource):
-            m.add_connection_to_resource('A', 'n1', 'Resource P')
+        self.assertRaises(InvalidResource, m.add_connection_to_resource, 'A', 'n1', 'Resource P')
 
     def test_DuplicateEntry_exception_raised_when_connecting_already_connected_port_to_a_resource(self):
         # GIVEN the following mesh
@@ -665,8 +653,7 @@ class MeshTest(unittest.TestCase):
         #
         #
         # THEN an InvalidConnection exception is raised
-        with self.assertRaises(InvalidConnection):
-            m.add_connection_to_resource('A', 'n1', 'Resource X')
+        self.assertRaises(InvalidConnection, m.add_connection_to_resource, 'A', 'n1', 'Resource X')
 
     def test_DuplicateEntry_exception_raised_when_adding_connection_to_port_already_connected_to_resource(self):
         # GIVEN the following mesh
@@ -704,8 +691,7 @@ class MeshTest(unittest.TestCase):
         #                              |______|______|
         #
         # THEN an InvalidConnection exception is raised
-        with self.assertRaises(InvalidConnection):
-            m.add_connection('A', 'n1', 'D', 'pX')
+        self.assertRaises(InvalidConnection, m.add_connection, 'A', 'n1', 'D', 'pX')
 
     def test_component_can_be_highlighted(self):
         # GIVEN the following mesh
@@ -764,8 +750,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN unknown component Y
         # THEN an InvalidComponent exception is raised
-        with self.assertRaises(InvalidComponent):
-            m.highlight_component('Y')
+        self.assertRaises(InvalidComponent, m.highlight_component, 'Y')
 
     def test_connection_can_be_highlighted(self):
         # GIVEN the following mesh
@@ -829,8 +814,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN unknown connection is highlighted
         # THEN an InvalidConnection exception is raised
-        with self.assertRaises(InvalidConnection):
-            m.highlight_connection('Y', 'n1', 'B', 'p1')
+        self.assertRaises(InvalidConnection, m.highlight_connection, 'Y', 'n1', 'B', 'p1')
 
     def test_connection_to_resource_can_be_highlighted(self):
         # GIVEN the following mesh
@@ -937,8 +921,7 @@ class MeshTest(unittest.TestCase):
 
         # WHEN unknown resource is highlighted
         # THEN an InvalidResource exception is raised
-        with self.assertRaises(InvalidResource):
-            m.highlight_resource('Resource K')
+        self.assertRaises(InvalidResource, m.highlight_resource, 'Resource K')
 
 
 class RenderTest(unittest.TestCase):
