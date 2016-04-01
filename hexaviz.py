@@ -64,9 +64,11 @@ When visualised using Graphviz, this should produce an output that looks like:
 import re
 import hashlib
 import textwrap
-from collections import OrderedDict
-
 from jinja2 import Environment
+try:
+    from collections import OrderedDict
+except ImportError:
+    from ordereddict import OrderedDict
 
 
 class DuplicateEntry(Exception):
