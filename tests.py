@@ -20,7 +20,6 @@
 
 import json
 import unittest
-import textwrap
 
 from hexaviz import Mesh, render, render_mesh_as_dot
 from hexaviz import DuplicateEntry, InvalidComponent, InvalidPort, InvalidConnection, InvalidResource
@@ -707,6 +706,239 @@ class MeshTest(unittest.TestCase):
         # THEN an InvalidConnection exception is raised
         with self.assertRaises(InvalidConnection):
             m.add_connection('A', 'n1', 'D', 'pX')
+
+    def test_component_can_be_highlighted(self):
+        # GIVEN the following mesh
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |  n2  |--------->[ Resource X ]
+        #    |______|______|         |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', needs_ports=['n2'], provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+        m.add_connection_to_resource('B', 'n2', 'Resource X')
+
+        # WHEN component B is highlighted
+        m.highlight_component('B')
+
+        # THEN this is reflected in the dict representation
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+                {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1'], 'highlighted': True}
+            ],
+            'resources': ['Resource X'],
+            'connections': [
+                {
+                    'consumer_component': 'A',
+                    'consumer_port': 'n1',
+                    'producer_component': 'B',
+                    'producer_port': 'p1',
+                },
+                {
+                    'consumer_component': 'B',
+                    'consumer_port': 'n2',
+                    'resource': 'Resource X',
+                },
+            ],
+        }, m.as_dict())
+
+    def test_InvalidComponent_exception_raised_when_highlighting_unknown_component(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________
+        #    |      A      |
+        #    |-------------|
+        #    |      |  n1  |            [ Resource X ]
+        #    |______|______|
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_resource('Resource X')
+
+        # WHEN unknown component Y
+        # THEN an InvalidComponent exception is raised
+        with self.assertRaises(InvalidComponent):
+            m.highlight_component('Y')
+
+    def test_connection_can_be_highlighted(self):
+        # GIVEN the following mesh
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |  n2  |--------->[ Resource X ]
+        #    |______|______|         |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', needs_ports=['n2'], provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+        m.add_connection_to_resource('B', 'n2', 'Resource X')
+
+        # WHEN connection between A:n1 and B:p1 is highlighted
+        m.highlight_connection('A', 'n1', 'B', 'p1')
+
+        # THEN this is reflected in the dict representation
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+                {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1']}
+            ],
+            'resources': ['Resource X'],
+            'connections': [
+                {
+                    'consumer_component': 'A',
+                    'consumer_port': 'n1',
+                    'producer_component': 'B',
+                    'producer_port': 'p1',
+                    'highlighted': True,
+                },
+                {
+                    'consumer_component': 'B',
+                    'consumer_port': 'n2',
+                    'resource': 'Resource X',
+                },
+            ],
+        }, m.as_dict())
+
+    def test_InvalidConnection_exception_raised_when_highlighting_unknown_connection(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |  n2  |--------->[ Resource X ]
+        #    |______|______|         |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', needs_ports=['n2'], provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+        m.add_connection_to_resource('B', 'n2', 'Resource X')
+
+        # WHEN unknown connection is highlighted
+        # THEN an InvalidConnection exception is raised
+        with self.assertRaises(InvalidConnection):
+            m.highlight_connection('Y', 'n1', 'B', 'p1')
+
+    def test_connection_to_resource_can_be_highlighted(self):
+        # GIVEN the following mesh
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |  n2  |--------->[ Resource X ]
+        #    |______|______|         |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', needs_ports=['n2'], provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+        m.add_connection_to_resource('B', 'n2', 'Resource X')
+
+        # WHEN connection to Resource X is highlighted
+        m.highlight_connection_to_resource('B', 'n2', 'Resource X')
+
+        # THEN this is reflected in the dict representation
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+                {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1']}
+            ],
+            'resources': ['Resource X'],
+            'connections': [
+                {
+                    'consumer_component': 'A',
+                    'consumer_port': 'n1',
+                    'producer_component': 'B',
+                    'producer_port': 'p1',
+                },
+                {
+                    'consumer_component': 'B',
+                    'consumer_port': 'n2',
+                    'resource': 'Resource X',
+                    'highlighted': True,
+                },
+            ],
+        }, m.as_dict())
+
+    def test_resource_can_be_highlighted(self):
+        # GIVEN the following mesh
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |  n2  |--------->[ Resource X ]
+        #    |______|______|         |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', needs_ports=['n2'], provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+        m.add_connection_to_resource('B', 'n2', 'Resource X')
+
+        # WHEN Resource X is highlighted
+        m.highlight_resource('Resource X')
+
+        # THEN this is reflected in the dict representation
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+                {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1']}
+            ],
+            'resources': ['Resource X'],
+            'highlighted_resources': ['Resource X'],
+            'connections': [
+                {
+                    'consumer_component': 'A',
+                    'consumer_port': 'n1',
+                    'producer_component': 'B',
+                    'producer_port': 'p1',
+                },
+                {
+                    'consumer_component': 'B',
+                    'consumer_port': 'n2',
+                    'resource': 'Resource X',
+                },
+            ],
+        }, m.as_dict())
+
+    def test_InvalidResource_exception_raised_when_highlighting_unknown_resource(self):
+        # GIVEN a mesh with the following component and resource
+        #
+        #     _____________           _____________
+        #    |      A      |         |      B      |
+        #    |-------------|         |-------------|
+        #    |      |  n1  |-------->|  p1  |  n2  |--------->[ Resource X ]
+        #    |______|______|         |______|______|
+        #
+        #
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_component('B', needs_ports=['n2'], provides_ports=['p1'])
+        m.add_resource('Resource X')
+        m.add_connection('A', 'n1', 'B', 'p1')
+        m.add_connection_to_resource('B', 'n2', 'Resource X')
+
+        # WHEN unknown resource is highlighted
+        # THEN an InvalidResource exception is raised
+        with self.assertRaises(InvalidResource):
+            m.highlight_resource('Resource K')
 
 
 class RenderTest(unittest.TestCase):

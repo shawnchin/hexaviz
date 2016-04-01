@@ -103,15 +103,16 @@ class Mesh(object):
 
     def __init__(self):
         self.components = OrderedDict()
-        self.connections = []
+        self.connections = OrderedDict()
         self.resources = []
+        self._highlighted_resource = set()
         self.connected_consumers = set()
 
     def add_component(self, component_name, needs_ports=None, provides_ports=None):
         """Adds a component to the mesh.
 
         :param str component_name: Name of component to add
-        :param list needs_port: List of needs ports for this component
+        :param list needs_ports: List of needs ports for this component
         :param list provides_ports: List of provides ports for this component
         :raises: DuplicateEntry if component of that name already exists
         """
@@ -181,7 +182,7 @@ class Mesh(object):
         if consumer in self.connected_consumers:
             raise InvalidConnection('{0} already connected'.format(consumer))
 
-        self.connections.append(ConnectionNode(consumer, producer))
+        self.connections[consumer, producer] = (ConnectionNode(consumer, producer))
         self.connected_consumers.add(consumer)
 
     def add_connection_to_resource(self, consumer_component, consumer_port, resource):
@@ -205,17 +206,70 @@ class Mesh(object):
         if consumer in self.connected_consumers:
             raise InvalidConnection('{0} already connected'.format(consumer))
 
-        self.connections.append(connection)
+        self.connections[consumer, resource] = connection
         self.connected_consumers.add(consumer)
+
+    def highlight_component(self, component_name):
+        """Highlights a component in the mesh.
+
+        :param str component_name: name of component to highlight
+        """
+        try:
+            self.components[component_name].highlighted = True
+        except KeyError:
+            raise InvalidComponent('{0} component does not exist in the mesh'.format(component_name))
+
+    def highlight_connection(self, consumer_component, consumer_port, producer_component, producer_port):
+        """Highlights a connection between a needs port from a consumer component to the provides port of a producer.
+
+        :param str consumer_component: name of the consumer component
+        :param str consumer_port: name of the needs port of the consumer
+        :param str producer_component: name of the producer component
+        :param str producer_port: name of the provides port of the producer
+        """
+        consumer = consumer_component, consumer_port
+        producer = producer_component, producer_port
+        try:
+            self.connections[consumer, producer].highlighted = True
+        except KeyError:
+            raise InvalidConnection('Invalid Connection: {0} -> {1}'.format(consumer, producer))
+
+    def highlight_connection_to_resource(self, consumer_component, consumer_port, resource):
+        """Highlights a connection between a needs port and a resource.
+
+        :param str consumer_component: name of the consumer component
+        :param str consumer_port: name of the needs port of the consumer
+        :param str resource: name of resource
+        """
+        consumer = consumer_component, consumer_port
+        try:
+            self.connections[consumer, resource].highlighted = True
+        except KeyError:
+            raise InvalidConnection('Invalid Connection: {0} -> {1}'.format(consumer, resource))
+
+    def highlight_resource(self, resource):
+        """Highlights a resource in the mesh.
+
+        :param str resource: name of resource to highlight
+        """
+        if resource not in self.resources:
+            raise InvalidResource('{0} resource does not exist in the mesh'.format(resource))
+
+        self._highlighted_resource.add(resource)
 
     def as_dict(self):
         """Returns a dict representation of the mesh.
         """
-        return {
+        d = {
             'components': [c.as_dict() for c in self.components.values()],
-            'connections': [c.as_dict() for c in self.connections],
+            'connections': [c.as_dict() for c in self.connections.values()],
             'resources': [r for r in self.resources],
         }
+
+        if self._highlighted_resource:
+            d['highlighted_resources'] = list(self._highlighted_resource)
+
+        return d
 
 
 class ConnectionNode(object):
@@ -229,18 +283,24 @@ class ConnectionNode(object):
         """
         self.consumer = consumer
         self.producer = producer
+        self.highlighted = False
 
     def as_dict(self):
         """Returns a dict representation of the connection.
         """
         self.consumer_component, self.consumer_port = self.consumer
         self.producer_component, self.producer_port = self.producer
-        return {
+        d = {
             'consumer_component': self.consumer_component,
             'consumer_port': self.consumer_port,
             'producer_component': self.producer_component,
             'producer_port': self.producer_port,
         }
+
+        if self.highlighted:
+            d['highlighted'] = True
+
+        return d
 
 
 class ResourceConnectionNode(ConnectionNode):
@@ -250,11 +310,16 @@ class ResourceConnectionNode(ConnectionNode):
         """Returns a dict representation of the connection.
         """
         self.consumer_component, self.consumer_port = self.consumer
-        return {
+        d = {
             'consumer_component': self.consumer_component,
             'consumer_port': self.consumer_port,
             'resource': self.producer,
         }
+
+        if self.highlighted:
+            d['highlighted'] = True
+
+        return d
 
 
 class ComponentNode(object):
@@ -269,6 +334,7 @@ class ComponentNode(object):
         self.name = name
         self.needs_ports = []
         self.provides_ports = []
+        self.highlighted = False
 
     def add_needs_port(self, port_name):
         """Assigns a needs port.
@@ -295,11 +361,16 @@ class ComponentNode(object):
     def as_dict(self):
         """Returns a dict representation of the component.
         """
-        return {
+        d = {
             'name': self.name,
             'needs_ports': list(self.needs_ports),
             'provides_ports': list(self.provides_ports),
         }
+
+        if self.highlighted:
+            d['highlighted'] = True
+
+        return d
 
     def assert_is_valid_needs_port(self, port_name):
         """Raises InvalidPort if given port is not a valid needs port.
@@ -363,18 +434,18 @@ def render_mesh_as_dot(mesh):
                     <{{ port|hash }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
                     {% endfor %}
                 }
-            }"];
+            }"{% if component.highlighted %}, color="red"{% endif %}];
             {% endfor %}
 
             {% for resource in resources %}
-            {{ resource|hash }} [label="{{ resource }}", shape="cds"];
+            {{ resource|hash }} [label="{{ resource }}", style="dashed"{% if resource in highlighted_resources %}, color="red"{% endif %}];
             {% endfor %}
 
             {% for conn in connections %}
             {% if "resource" in conn %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash }};
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
             {% else %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }};
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }}{% if conn.highlighted %}[color="red"]{% endif %};
             {% endif %}
             {% endfor %}
         }
