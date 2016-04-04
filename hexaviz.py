@@ -440,12 +440,12 @@ def render_mesh_as_dot(mesh):
             {% endfor %}
 
             {% for resource in resources %}
-            {{ resource|hash }} [label="{{ resource }}", style="dashed"{% if resource in highlighted_resources %}, color="red"{% endif %}];
+            {{ resource|hash_p }} [label="{{ resource }}", style="dashed"{% if resource in highlighted_resources %}, color="red"{% endif %}];
             {% endfor %}
 
             {% for conn in connections %}
             {% if "resource" in conn %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash_p }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
             {% else %}
             {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }}{% if conn.highlighted %}[color="red"]{% endif %};
             {% endif %}
