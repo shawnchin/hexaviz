@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Shawn Chin
+# Copyright (c) 2015-2019 Shawn Chin
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -21,8 +21,8 @@
 import json
 import unittest
 
-from hexaviz import Mesh, render, render_mesh_as_dot
-from hexaviz import DuplicateEntry, InvalidComponent, InvalidPort, InvalidConnection, InvalidResource
+from hexaviz import Mesh, render, render_mesh_as_dot, DuplicateEntry, InvalidComponent, InvalidPort, InvalidDomain, \
+    InvalidConnection, InvalidResource
 
 
 class MeshTest(unittest.TestCase):
@@ -940,6 +940,145 @@ class MeshTest(unittest.TestCase):
         # THEN an InvalidResource exception is raised
         self.assertRaises(InvalidResource, m.highlight_resource, 'Resource K')
 
+    def test_adding_empty_domain(self):
+        m = Mesh()
+        m.add_domain('D')
+
+        self.assertEqual({
+            'components': [],
+            'domains': [{
+                'name': 'D',
+                'label_for_needs': 'D__needs',
+                'label_for_provides': 'D__provides',
+                'needs_ports': [],
+                'provides_ports': [],
+                'children': [],
+            }],
+            'resources': [],
+            'connections': [],
+        }, m.as_dict())
+
+    def test_adding_domain_with_child_components(self):
+        m = Mesh()
+        m.add_component('A')
+        m.add_component('B')
+        m.add_component('C')
+        m.add_domain('D')
+        m.add_component_to_domain('A', 'D')
+        m.add_component_to_domain('B', 'D')
+
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': [], 'provides_ports': []},
+                {'name': 'B', 'needs_ports': [], 'provides_ports': []},
+                {'name': 'C', 'needs_ports': [], 'provides_ports': []},
+            ],
+            'domains': [{
+                'name': 'D',
+                'label_for_needs': 'D__needs',
+                'label_for_provides': 'D__provides',
+                'needs_ports': [],
+                'provides_ports': [],
+                'children': ['A', 'B'],
+            }],
+            'resources': [],
+            'connections': [],
+        }, m.as_dict())
+
+    def test_DuplicateEntry_raised_when_adding_domain_that_name_matching_another_component(self):
+        m = Mesh()
+        m.add_component('D')
+        self.assertRaises(DuplicateEntry, m.add_domain, 'D')
+
+    def test_DuplicateEntry_raised_when_adding_domain_that_name_matching_another_domain(self):
+        m = Mesh()
+        m.add_domain('D')
+        self.assertRaises(DuplicateEntry, m.add_domain, 'D')
+
+    def test_InvalidComponent_raised_when_adding_a_nonexistent_component_to_domain(self):
+        m = Mesh()
+        m.add_component('A')
+        m.add_domain('D')
+        self.assertRaises(InvalidComponent, m.add_component_to_domain, 'B', 'D')
+
+    def test_InvalidDomain_raised_when_adding_component_to_nonexistent_domain(self):
+        m = Mesh()
+        m.add_component('A')
+        self.assertRaises(InvalidDomain, m.add_component_to_domain, 'A', 'D')
+
+    def test_DuplicateEntry_raised_when_adding_a_component_to_domains_more_than_once(self):
+        m = Mesh()
+        m.add_component('A')
+        m.add_domain('D')
+        m.add_domain('D2')
+        m.add_component_to_domain('A', 'D')
+        self.assertRaises(DuplicateEntry, m.add_component_to_domain, 'A', 'D')
+        self.assertRaises(DuplicateEntry, m.add_component_to_domain, 'A', 'D2')
+
+    def test_InvalidComponent_raised_when_adding_domain_to_another_domain(self):
+        # nested domains not yet supported
+        m = Mesh()
+        m.add_domain('D')
+        m.add_domain('D2')
+        self.assertRaises(InvalidComponent, m.add_component_to_domain, 'D', 'D2')
+
+    def test_exposing_needs_port_to_parent_domain(self):
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_domain('D')
+        m.add_component_to_domain('A', 'D')
+        m.expose_component_needs_port('A', 'n1')
+
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+            ],
+            'domains': [{
+                'name': 'D',
+                'label_for_needs': 'D__needs',
+                'label_for_provides': 'D__provides',
+                'needs_ports': ['n1'],
+                'provides_ports': [],
+                'children': ['A'],
+            }],
+            'resources': [],
+            'connections': [{
+                'consumer_component': 'A',
+                'consumer_port': 'n1',
+                'domain_export': 'needs',
+                'producer_component': 'D__needs',
+                'producer_port': 'n1',
+            }],
+        }, m.as_dict())
+
+    def test_exposing_provides_port_to_parent_domain(self):
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'])
+        m.add_domain('D')
+        m.add_component_to_domain('A', 'D')
+        m.expose_component_needs_port('A', 'n1')
+
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+            ],
+            'domains': [{
+                'name': 'D',
+                'label_for_needs': 'D__needs',
+                'label_for_provides': 'D__provides',
+                'needs_ports': ['n1'],
+                'provides_ports': [],
+                'children': ['A'],
+            }],
+            'resources': [],
+            'connections': [{
+                'consumer_component': 'A',
+                'consumer_port': 'n1',
+                'domain_export': 'needs',
+                'producer_component': 'D__needs',
+                'producer_port': 'n1',
+            }],
+        }, m.as_dict())
 
 class RenderTest(unittest.TestCase):
 
