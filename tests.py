@@ -35,7 +35,7 @@ class MeshTest(unittest.TestCase):
         data = m.as_dict()
 
         # THEN a valid empty representation is returned
-        self.assertEqual({'components': [], 'connections': [], 'resources': []}, data)
+        self.assertEqual({'components': [], 'domains': [], 'connections': [], 'resources': []}, data)
 
     def test_added_component_can_be_retrieved_from_mesh(self):
         # GIVEN a new Mesh instance
@@ -49,6 +49,7 @@ class MeshTest(unittest.TestCase):
             'components': [
                 {'name': 'Component A', 'needs_ports': [], 'provides_ports': []},
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -69,6 +70,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'Component Z', 'needs_ports': [], 'provides_ports': []},
                 {'name': 'Component M', 'needs_ports': [], 'provides_ports': []},
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -100,6 +102,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': []
                 },
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -121,6 +124,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': ['provides 1']
                 },
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -141,6 +145,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': []
                 },
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -161,6 +166,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': ['provides 1', 'provides 2'],
                 },
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -185,6 +191,7 @@ class MeshTest(unittest.TestCase):
                     'provides_ports': ['provides 8', 'provides 7', 'provides 1'],
                 },
             ],
+            'domains': [],
             'resources': [],
             'connections': [],
         }, m.as_dict())
@@ -236,6 +243,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
                 {'name': 'B', 'needs_ports': [], 'provides_ports': ['p1']},
             ],
+            'domains': [],
             'resources': [],
             'connections': [
                 {
@@ -294,6 +302,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'B', 'needs_ports': [], 'provides_ports': ['p1']},
                 {'name': 'C', 'needs_ports': ['nX'], 'provides_ports': []},
             ],
+            'domains': [],
             'resources': [],
             'connections': [
                 {
@@ -365,6 +374,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'C', 'needs_ports': ['nX'], 'provides_ports': []},
                 {'name': 'D', 'needs_ports': [], 'provides_ports': ['pX']},
             ],
+            'domains': [],
             'resources': [],
             'connections': [
                 {
@@ -503,6 +513,7 @@ class MeshTest(unittest.TestCase):
         # THEN that resource is represented in the output
         self.assertEqual({
             'components': [],
+            'domains': [],
             'resources': ['Resource X'],
             'connections': [],
         }, m.as_dict())
@@ -519,6 +530,7 @@ class MeshTest(unittest.TestCase):
         # THEN that resources are presented in the order they were added
         self.assertEqual({
             'components': [],
+            'domains': [],
             'resources': ['Resource X', 'Resource Z', 'Resource Y'],
             'connections': [],
         }, m.as_dict())
@@ -560,6 +572,7 @@ class MeshTest(unittest.TestCase):
             'components': [
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
             ],
+            'domains': [],
             'resources': ['Resource X'],
             'connections': [
                 {
@@ -719,6 +732,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
                 {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1'], 'highlighted': True}
             ],
+            'domains': [],
             'resources': ['Resource X'],
             'connections': [
                 {
@@ -778,6 +792,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
                 {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1']}
             ],
+            'domains': [],
             'resources': ['Resource X'],
             'connections': [
                 {
@@ -842,6 +857,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
                 {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1']}
             ],
+            'domains': [],
             'resources': ['Resource X'],
             'connections': [
                 {
@@ -885,6 +901,7 @@ class MeshTest(unittest.TestCase):
                 {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
                 {'name': 'B', 'needs_ports': ['n2'], 'provides_ports': ['p1']}
             ],
+            'domains': [],
             'resources': ['Resource X'],
             'highlighted_resources': ['Resource X'],
             'connections': [
