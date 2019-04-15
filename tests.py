@@ -1053,14 +1053,80 @@ class MeshTest(unittest.TestCase):
 
     def test_exposing_provides_port_to_parent_domain(self):
         m = Mesh()
-        m.add_component('A', needs_ports=['n1'])
+        m.add_component('A', provides_ports=['p1'])
         m.add_domain('D')
         m.add_component_to_domain('A', 'D')
-        m.expose_component_needs_port('A', 'n1')
+        m.expose_component_provides_port('A', 'p1')
 
         self.assertEqual({
             'components': [
-                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': []},
+                {'name': 'A', 'needs_ports': [], 'provides_ports': ['p1']},
+            ],
+            'domains': [{
+                'name': 'D',
+                'label_for_needs': 'D__needs',
+                'label_for_provides': 'D__provides',
+                'needs_ports': [],
+                'provides_ports': ['p1'],
+                'children': ['A'],
+            }],
+            'resources': [],
+            'connections': [{
+                'consumer_component': 'D__provides',
+                'consumer_port': 'p1',
+                'domain_export': 'provides',
+                'producer_component': 'A',
+                'producer_port': 'p1',
+            }],
+        }, m.as_dict())
+
+    def test_InvalidComponent_raised_if_exposing_ports_for_unknown_component(self):
+        m = Mesh()
+        self.assertRaises(InvalidComponent, m.expose_component_needs_port, 'A', 'n1')
+        self.assertRaises(InvalidComponent, m.expose_component_provides_port, 'A', 'p1')
+
+    def test_InvalidDomain_raised_if_parent_domain_unspecified(self):
+        m = Mesh()
+        m.add_component('A', needs_ports=['n1'], provides_ports=['p1'])
+        self.assertRaises(InvalidDomain, m.expose_component_needs_port, 'A', 'n1')
+        self.assertRaises(InvalidDomain, m.expose_component_provides_port, 'A', 'p1')
+
+    def test_InvalidPort_raised_if_exposing_port_that_does_not_exist_on_component(self):
+        m = Mesh()
+        m.add_domain('D')
+        m.add_component('A', needs_ports=['n1'], provides_ports=['p1'])
+        m.add_component_to_domain('A', 'D')
+
+        self.assertRaises(InvalidPort, m.expose_component_needs_port, 'A', 'n2')
+        self.assertRaises(InvalidPort, m.expose_component_provides_port, 'A', 'p2')
+
+    def test_DuplicateEntry_raised_if_exposing_provides_port_on_domain_that_is_already_exposed(self):
+        m = Mesh()
+        m.add_domain('D')
+        m.add_component('A', needs_ports=['n1'], provides_ports=['p1'])
+        m.add_component('B', needs_ports=['n1'], provides_ports=['p1'])
+        m.add_component_to_domain('A', 'D')
+        m.add_component_to_domain('B', 'D')
+
+        m.expose_component_provides_port('A', 'p1')  # OK
+        self.assertRaises(DuplicateEntry, m.expose_component_provides_port, 'A', 'p1')
+        self.assertRaises(DuplicateEntry, m.expose_component_provides_port, 'B', 'p1')
+
+    def test_domain_needs_port_can_be_exposed_by_multiple_components(self):
+        m = Mesh()
+        m.add_domain('D')
+        m.add_component('A', needs_ports=['n1'], provides_ports=['p1'])
+        m.add_component('B', needs_ports=['n1'], provides_ports=[])
+        m.add_component_to_domain('A', 'D')
+        m.add_component_to_domain('B', 'D')
+
+        m.expose_component_needs_port('A', 'n1')
+        m.expose_component_needs_port('B', 'n1')
+
+        self.assertEqual({
+            'components': [
+                {'name': 'A', 'needs_ports': ['n1'], 'provides_ports': ['p1']},
+                {'name': 'B', 'needs_ports': ['n1'], 'provides_ports': []},
             ],
             'domains': [{
                 'name': 'D',
@@ -1068,7 +1134,7 @@ class MeshTest(unittest.TestCase):
                 'label_for_provides': 'D__provides',
                 'needs_ports': ['n1'],
                 'provides_ports': [],
-                'children': ['A'],
+                'children': ['A', 'B'],
             }],
             'resources': [],
             'connections': [{
@@ -1077,8 +1143,16 @@ class MeshTest(unittest.TestCase):
                 'domain_export': 'needs',
                 'producer_component': 'D__needs',
                 'producer_port': 'n1',
+            }, {
+                'consumer_component': 'B',
+                'consumer_port': 'n1',
+                'domain_export': 'needs',
+                'producer_component': 'D__needs',
+                'producer_port': 'n1',
             }],
         }, m.as_dict())
+
+
 
 class RenderTest(unittest.TestCase):
 

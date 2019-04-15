@@ -145,7 +145,7 @@ class DomainProvidesConnectionNode(ConnectionNode):
     """Internal representation of component's port being exposed as that of its parent domain."""
 
     def as_dict(self):
-        d = super(DomainNeedsConnectionNode, self).as_dict()
+        d = super(DomainProvidesConnectionNode, self).as_dict()
         d['domain_export'] = "provides"
         return d
 
@@ -313,7 +313,7 @@ class Mesh(object):
 
         try:
             domain = self.components[domain_name]
-        except:
+        except KeyError:
             raise InvalidDomain('{0} domain does not exist in the mesh'.format(domain_name))
 
         component.parent = domain_name
@@ -330,15 +330,15 @@ class Mesh(object):
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(component_name))
 
+        component.assert_is_valid_needs_port(port_name)
+
         try:
             domain = self.components[component.parent]
         except KeyError:
             raise InvalidDomain('Parent domain for {0} component is unspecified or invalid'.format(component_name))
 
-        if port_name in domain.needs_ports:
-            raise DuplicateEntry('{0} domain already has exposed needs port for {1}'.format(domain.name, port_name))
-        else:
-            domain.needs_ports.append(port_name)
+        if port_name not in domain.needs_ports:
+            domain.add_needs_port(port_name)
 
         consumer = component_name, port_name
         producer = domain.label_for_needs, port_name
@@ -355,6 +355,8 @@ class Mesh(object):
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(component_name))
 
+        component.assert_is_valid_provides_port(port_name)
+
         try:
             domain = self.components[component.parent]
         except KeyError:
@@ -363,7 +365,7 @@ class Mesh(object):
         if port_name in domain.provides_ports:
             raise DuplicateEntry('{0} domain already has exposed provides port for {1}'.format(domain.name, port_name))
         else:
-            domain.provides_ports.append(port_name)
+            domain.add_provides_port(port_name)
 
         consumer = domain.label_for_provides, port_name
         producer = component_name, port_name
@@ -546,13 +548,13 @@ class DomainNode(ComponentNode):
         """Raises InvalidPort if given port is not a valid needs port.
         """
         if port_name not in self.needs_ports:
-            raise InvalidPort('{0} is not a valid valid needs port for component {1}'.format(port_name, self.name))
+            raise InvalidPort('{0} is not a valid needs port for component {1}'.format(port_name, self.name))
 
     def assert_is_valid_provides_port(self, port_name):
         """Raises InvalidPort if given port is not a valid provides port.
         """
         if port_name not in self.provides_ports:
-            raise InvalidPort('{0} is not a valid valid provides port for component {1}'.format(port_name, self.name))
+            raise InvalidPort('{0} is not a valid provides port for component {1}'.format(port_name, self.name))
 
 
 def render(mesh, template, custom_filters=None):
