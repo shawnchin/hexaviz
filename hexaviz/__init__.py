@@ -61,6 +61,9 @@ When visualised using Graphviz, this should produce an output that looks like:
            |______|______|           |______|______|
 
 """
+__author__ = "Shawn Chin"
+__version__ = "v1.2.0"
+
 import re
 import hashlib
 import textwrap
