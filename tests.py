@@ -21,8 +21,18 @@
 import json
 import unittest
 
-from hexaviz import Mesh, render, render_mesh_as_dot, DuplicateEntry, InvalidComponent, InvalidPort, InvalidDomain, \
-    InvalidConnection, InvalidResource
+from hexaviz import (
+    Mesh,
+    render,
+    render_mesh_as_dot,
+    DuplicateEntry,
+    InvalidComponent,
+    InvalidPort,
+    InvalidDomain,
+    InvalidConnection,
+    InvalidResource,
+)
+
 
 
 class MeshTest(unittest.TestCase):
