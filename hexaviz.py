@@ -1,4 +1,4 @@
-# Copyright (c) 2015 Shawn Chin
+# Copyright (c) 2015-2019 Shawn Chin
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -81,6 +81,11 @@ class InvalidComponent(Exception):
     """
 
 
+class InvalidDomain(Exception):
+    """Raised when a referencing a domain that does not exist in the mesh.
+    """
+
+
 class InvalidPort(Exception):
     """Raised when a referencing an invalid port on a component in the mesh.
     """
@@ -94,6 +99,74 @@ class InvalidConnection(Exception):
 class InvalidResource(Exception):
     """Raised when there is an attempt to create an invalid resource in the mesh.
     """
+
+
+class ConnectionNode(object):
+    """Internal representation of a connection between components within the mesh.
+    """
+    def __init__(self, consumer, producer):
+        """Instantiates a new connection between the given consumer and producer.
+
+        :param tuple consumer: consumer of the connection defined as (consumer_component, consumer_port)
+        :param tuple producer: producer of the connection defined as (producer_component, producer_port)
+        """
+        self.consumer = consumer
+        self.producer = producer
+        self.highlighted = False
+
+    def as_dict(self):
+        """Returns a dict representation of the connection.
+        """
+        consumer_component, consumer_port = self.consumer
+        producer_component, producer_port = self.producer
+        d = {
+            'consumer_component': consumer_component,
+            'consumer_port': consumer_port,
+            'producer_component': producer_component,
+            'producer_port': producer_port,
+        }
+
+        if self.highlighted:
+            d['highlighted'] = True
+
+        return d
+
+
+class DomainNeedsConnectionNode(ConnectionNode):
+    """Internal representation of component's port being exposed as that of its parent domain."""
+
+    def as_dict(self):
+        d = super(DomainNeedsConnectionNode, self).as_dict()
+        d['domain_export'] = "needs"
+        return d
+
+
+class DomainProvidesConnectionNode(ConnectionNode):
+    """Internal representation of component's port being exposed as that of its parent domain."""
+
+    def as_dict(self):
+        d = super(DomainProvidesConnectionNode, self).as_dict()
+        d['domain_export'] = "provides"
+        return d
+
+
+class ResourceConnectionNode(ConnectionNode):
+    """Internal representation of a connection between components and resources within the mesh.
+    """
+    def as_dict(self):
+        """Returns a dict representation of the connection.
+        """
+        consumer_component, consumer_port = self.consumer
+        d = {
+            'consumer_component': consumer_component,
+            'consumer_port': consumer_port,
+            'resource': self.producer,
+        }
+
+        if self.highlighted:
+            d['highlighted'] = True
+
+        return d
 
 
 class Mesh(object):
@@ -119,7 +192,7 @@ class Mesh(object):
         :raises: DuplicateEntry if component of that name already exists
         """
         if component_name in self.components:
-            raise DuplicateEntry('Component with name {0} already exists'.format(component_name))
+            raise DuplicateEntry('Component or Domain with name {0} already exists'.format(component_name))
 
         self.components[component_name] = ComponentNode(component_name)
 
@@ -169,23 +242,22 @@ class Mesh(object):
         :param str producer_port: name of the provides port of the producer
         """
         try:
-            self.components[consumer_component].assert_is_valid_needs_port(consumer_port)
+            consumer = self.components[consumer_component]
+            consumer.assert_is_valid_needs_port(consumer_port)
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(consumer_component))
 
         try:
-            self.components[producer_component].assert_is_valid_provides_port(producer_port)
+            producer = self.components[producer_component]
+            producer.assert_is_valid_provides_port(producer_port)
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(producer_component))
 
-        consumer = consumer_component, consumer_port
-        producer = producer_component, producer_port
-
-        if consumer in self.connected_consumers:
-            raise InvalidConnection('{0} already connected'.format(consumer))
-
-        self.connections[consumer, producer] = (ConnectionNode(consumer, producer))
-        self.connected_consumers.add(consumer)
+        # FIXME: using label_for_* here leaks the requirements of a specific viz template (dot) to the conceptual model
+        #        of the mesh. Not great. This is essentially a hack to get domains working for now. Need to rethink this
+        consumer = consumer.label_for_needs, consumer_port
+        producer = producer.label_for_provides, producer_port
+        self._add_connection_between_consumer_and_producer(consumer, producer)
 
     def add_connection_to_resource(self, consumer_component, consumer_port, resource):
         """Adds a connection between a needs port from a consumer component to a resource.
@@ -195,21 +267,114 @@ class Mesh(object):
         :param str resource: name of resource
         """
         try:
-            self.components[consumer_component].assert_is_valid_needs_port(consumer_port)
+            consumer = self.components[consumer_component]
+            consumer.assert_is_valid_needs_port(consumer_port)
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(consumer_component))
 
         if resource not in self.resources:
             raise InvalidResource('{0} resource does not exist in the mesh'.format(resource))
 
-        consumer = consumer_component, consumer_port
-        connection = ResourceConnectionNode(consumer, resource)
+        consumer = consumer.label_for_needs, consumer_port
+        self._add_connection_between_consumer_and_producer(consumer, resource, connectionClass=ResourceConnectionNode)
 
+    def _add_connection_between_consumer_and_producer(self, consumer, producer, connectionClass=ConnectionNode):
         if consumer in self.connected_consumers:
             raise InvalidConnection('{0} already connected'.format(consumer))
 
-        self.connections[consumer, resource] = connection
+        self.connections[consumer, producer] = (connectionClass(consumer, producer))
         self.connected_consumers.add(consumer)
+
+    def add_domain(self, domain_name):
+        """Creates a domain which groups together components as a single entity.
+
+        :param str domain_name: name of domain to add
+        :raises: DuplicateEntry if component or domain of that name already exists
+        """
+        if domain_name in self.components:
+            raise DuplicateEntry('Component or Domain with name {0} already exists'.format(domain_name))
+
+        self.components[domain_name] = DomainNode(domain_name)
+
+    def add_component_to_domain(self, component_name, domain_name):
+        """Adds a component into the given domain.
+
+        :param str component_name: Name of the component
+        :param str domain_name: Name of the domain
+        """
+        try:
+            component = self.components[component_name]
+        except KeyError:
+            raise InvalidComponent('{0} component does not exist in the mesh'.format(component_name))
+
+        # No reason why we cannot eventually support nested domains. We just need to test it out and potentially
+        # generalise the way we set up connections between ports.
+        if isinstance(component, DomainNode):
+            raise InvalidComponent(
+                'Cannot add {0} to {1}. Nested domains not yet supported'.format(component_name, domain_name))
+        
+        if component.parent:
+            raise DuplicateEntry('Component {0} is already part of domain {1}'.format(component.name, component.parent))
+
+        try:
+            domain = self.components[domain_name]
+        except KeyError:
+            raise InvalidDomain('{0} domain does not exist in the mesh'.format(domain_name))
+
+        component.parent = domain_name
+        domain.add_child_component(component_name)
+
+    def expose_component_needs_port(self, component_name, port_name):
+        """Associated a component's need port to that of its parent domain.
+
+        :param str component_name: Name of component
+        :param str port_name: Name of needs port
+        """
+        try:
+            component = self.components[component_name]
+        except KeyError:
+            raise InvalidComponent('{0} component does not exist in the mesh'.format(component_name))
+
+        component.assert_is_valid_needs_port(port_name)
+
+        try:
+            domain = self.components[component.parent]
+        except KeyError:
+            raise InvalidDomain('Parent domain for {0} component is unspecified or invalid'.format(component_name))
+
+        if port_name not in domain.needs_ports:
+            domain.add_needs_port(port_name)
+
+        consumer = component_name, port_name
+        producer = domain.label_for_needs, port_name
+        self._add_connection_between_consumer_and_producer(consumer, producer, connectionClass=DomainNeedsConnectionNode)
+
+    def expose_component_provides_port(self, component_name, port_name):
+        """Associated a component's provides port to that of its parent domain.
+
+        :param str component_name: Name of component
+        :param str port_name: Name of provides port
+        """
+        try:
+            component = self.components[component_name]
+        except KeyError:
+            raise InvalidComponent('{0} component does not exist in the mesh'.format(component_name))
+
+        component.assert_is_valid_provides_port(port_name)
+
+        try:
+            domain = self.components[component.parent]
+        except KeyError:
+            raise InvalidDomain('Parent domain for {0} component is unspecified or invalid'.format(component_name))
+
+        if port_name in domain.provides_ports:
+            raise DuplicateEntry('{0} domain already has exposed provides port for {1}'.format(domain.name, port_name))
+        else:
+            domain.add_provides_port(port_name)
+
+        consumer = domain.label_for_provides, port_name
+        producer = component_name, port_name
+        self._add_connection_between_consumer_and_producer(consumer, producer, connectionClass=DomainProvidesConnectionNode)
 
     def highlight_component(self, component_name):
         """Highlights a component in the mesh.
@@ -263,63 +428,14 @@ class Mesh(object):
         """Returns a dict representation of the mesh.
         """
         d = {
-            'components': [c.as_dict() for c in self.components.values()],
+            'components': [c.as_dict() for c in self.components.values() if not isinstance(c, DomainNode)],
+            'domains': [c.as_dict() for c in self.components.values() if isinstance(c, DomainNode)],
             'connections': [c.as_dict() for c in self.connections.values()],
             'resources': [r for r in self.resources],
         }
 
         if self._highlighted_resource:
             d['highlighted_resources'] = list(self._highlighted_resource)
-
-        return d
-
-
-class ConnectionNode(object):
-    """Internal representation of a connection between components within the mesh.
-    """
-    def __init__(self, consumer, producer):
-        """Instantiates a new connection between the given consumer and producer.
-
-        :param tuple consumer: consumer of the connection defined as (consumer_component, consumer_port)
-        :param tuple producer: producer of the connection defined as (producer_component, producer_port)
-        """
-        self.consumer = consumer
-        self.producer = producer
-        self.highlighted = False
-
-    def as_dict(self):
-        """Returns a dict representation of the connection.
-        """
-        self.consumer_component, self.consumer_port = self.consumer
-        self.producer_component, self.producer_port = self.producer
-        d = {
-            'consumer_component': self.consumer_component,
-            'consumer_port': self.consumer_port,
-            'producer_component': self.producer_component,
-            'producer_port': self.producer_port,
-        }
-
-        if self.highlighted:
-            d['highlighted'] = True
-
-        return d
-
-
-class ResourceConnectionNode(ConnectionNode):
-    """Internal representation of a connection between components and resources within the mesh.
-    """
-    def as_dict(self):
-        """Returns a dict representation of the connection.
-        """
-        self.consumer_component, self.consumer_port = self.consumer
-        d = {
-            'consumer_component': self.consumer_component,
-            'consumer_port': self.consumer_port,
-            'resource': self.producer,
-        }
-
-        if self.highlighted:
-            d['highlighted'] = True
 
         return d
 
@@ -337,6 +453,7 @@ class ComponentNode(object):
         self.needs_ports = []
         self.provides_ports = []
         self.highlighted = False
+        self.parent = None
 
     def add_needs_port(self, port_name):
         """Assigns a needs port.
@@ -374,6 +491,16 @@ class ComponentNode(object):
 
         return d
 
+    @property
+    def label_for_needs(self):
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
+        return self.name
+
+    @property
+    def label_for_provides(self):
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
+        return self.name
+
     def assert_is_valid_needs_port(self, port_name):
         """Raises InvalidPort if given port is not a valid needs port.
         """
@@ -385,6 +512,64 @@ class ComponentNode(object):
         """
         if port_name not in self.provides_ports:
             raise InvalidPort('{0} is not a valid valid provides port for component {1}'.format(port_name, self.name))
+
+
+class DomainNode(ComponentNode):
+    def __init__(self, name):
+        """Instantiates the domain node with a given name
+
+        :param str name: domain name
+        """
+        self.name = name
+        self.needs_ports = []
+        self.provides_ports = []
+        self.children = set()
+
+    def add_child_component(self, component_name):
+        """Adds a component as a child to this domain.
+
+        :param str component_name: Name of component to add
+        :raises: DuplicateEntry if compoent already a child of this domain.
+        """
+        if component_name in self.children:
+            raise DuplicateEntry('{0} component is already a child of {1} domain'.format(component_name, self.name))
+        
+        self.children.add(component_name)
+
+    def as_dict(self):
+        """Returns a dict representation of the component.
+        """
+        d = {
+            'name': self.name,
+            'needs_ports': list(self.needs_ports),
+            'provides_ports': list(self.provides_ports),
+            'children': list(self.children),
+            'label_for_needs': self.label_for_needs,
+            'label_for_provides': self.label_for_provides,
+        }
+        return d
+
+    @property
+    def label_for_needs(self):
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
+        return self.name + "__needs"
+
+    @property
+    def label_for_provides(self):
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
+        return self.name + "__provides"
+
+    def assert_is_valid_needs_port(self, port_name):
+        """Raises InvalidPort if given port is not a valid needs port.
+        """
+        if port_name not in self.needs_ports:
+            raise InvalidPort('{0} is not a valid needs port for component {1}'.format(port_name, self.name))
+
+    def assert_is_valid_provides_port(self, port_name):
+        """Raises InvalidPort if given port is not a valid provides port.
+        """
+        if port_name not in self.provides_ports:
+            raise InvalidPort('{0} is not a valid provides port for component {1}'.format(port_name, self.name))
 
 
 def render(mesh, template, custom_filters=None):
@@ -423,7 +608,7 @@ def render_mesh_as_dot(mesh):
         digraph G {
 
             rankdir=LR;
-            node [shape=record];
+            node [shape=record,style=filled];
 
             {% for component in components %}
             {{ component.name|hash }} [label="{{ component.name|escape }} | {
@@ -439,6 +624,39 @@ def render_mesh_as_dot(mesh):
             }"{% if component.highlighted %}, color="red"{% endif %}];
             {% endfor %}
 
+            {% for domain in domains %}
+            subgraph cluster_domain_{{ domain.name|hash }} {
+                label="{{ domain.name }}";
+                style="rounded";
+                rank=same;
+
+                {% if domain.provides_ports %}
+                {{ domain.label_for_provides|hash }} [style="dashed" label="
+                    {% for port in domain.provides_ports %}
+                    <{{ port|hash_p }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
+                    {% endfor %}
+                "]
+                {% endif %}
+
+                subgraph cluster_domain_{{ domain.name|hash }}_services {
+                    style="rounded,dashed";
+                    label="";
+
+                    {% for child in domain.children %}
+                    {{ child|hash }};
+                    {% endfor %}
+                }
+                
+                {% if domain.needs_ports %}
+                {{ domain.label_for_needs|hash }} [style="dashed" label="
+                    {% for port in domain.needs_ports %}
+                    <{{ port|hash }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
+                    {% endfor %}
+                "]
+                {% endif %}
+            }
+            {% endfor %}
+
             {% for resource in resources %}
             {{ resource|hash_p }} [label="{{ resource }}", style="dashed"{% if resource in highlighted_resources %}, color="red"{% endif %}];
             {% endfor %}
@@ -446,6 +664,12 @@ def render_mesh_as_dot(mesh):
             {% for conn in connections %}
             {% if "resource" in conn %}
             {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash_p }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
+            {% elif "domain_export" in conn %}
+            {% if conn.domain_export == "needs" %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }} [color="grey",arrowhead="dot"];
+            {% else %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash_p }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }} [color="grey",dir="back",arrowtail="dot"];
+            {% endif %}
             {% else %}
             {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }}{% if conn.highlighted %}[color="red"]{% endif %};
             {% endif %}
