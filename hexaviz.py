@@ -242,17 +242,21 @@ class Mesh(object):
         :param str producer_port: name of the provides port of the producer
         """
         try:
-            self.components[consumer_component].assert_is_valid_needs_port(consumer_port)
+            consumer = self.components[consumer_component]
+            consumer.assert_is_valid_needs_port(consumer_port)
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(consumer_component))
 
         try:
-            self.components[producer_component].assert_is_valid_provides_port(producer_port)
+            producer = self.components[producer_component]
+            producer.assert_is_valid_provides_port(producer_port)
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(producer_component))
 
-        consumer = consumer_component, consumer_port
-        producer = producer_component, producer_port
+        # FIXME: using label_for_* here leaks the requirements of a specific viz template (dot) to the conceptual model
+        #        of the mesh. Not great. This is essentially a hack to get domains working for now. Need to rethink this
+        consumer = consumer.label_for_needs, consumer_port
+        producer = producer.label_for_provides, producer_port
         self._add_connection_between_consumer_and_producer(consumer, producer)
 
     def add_connection_to_resource(self, consumer_component, consumer_port, resource):
@@ -263,14 +267,15 @@ class Mesh(object):
         :param str resource: name of resource
         """
         try:
-            self.components[consumer_component].assert_is_valid_needs_port(consumer_port)
+            consumer = self.components[consumer_component]
+            consumer.assert_is_valid_needs_port(consumer_port)
         except KeyError:
             raise InvalidComponent('{0} component does not exist in the mesh'.format(consumer_component))
 
         if resource not in self.resources:
             raise InvalidResource('{0} resource does not exist in the mesh'.format(resource))
 
-        consumer = consumer_component, consumer_port
+        consumer = consumer.label_for_needs, consumer_port
         self._add_connection_between_consumer_and_producer(consumer, resource, connectionClass=ResourceConnectionNode)
 
     def _add_connection_between_consumer_and_producer(self, consumer, producer, connectionClass=ConnectionNode):
@@ -486,6 +491,16 @@ class ComponentNode(object):
 
         return d
 
+    @property
+    def label_for_needs(self):
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
+        return self.name
+
+    @property
+    def label_for_provides(self):
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
+        return self.name
+
     def assert_is_valid_needs_port(self, port_name):
         """Raises InvalidPort if given port is not a valid needs port.
         """
@@ -536,12 +551,12 @@ class DomainNode(ComponentNode):
 
     @property
     def label_for_needs(self):
-        """Label accessible by templates to differentiate between needs and provides placeholders."""
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
         return self.name + "__needs"
 
     @property
     def label_for_provides(self):
-        """Label accessible by templates to differentiate between needs and provides placeholders."""
+        """Label used by connections to differentiate between needs and provides placeholders of components."""
         return self.name + "__provides"
 
     def assert_is_valid_needs_port(self, port_name):
@@ -650,11 +665,11 @@ def render_mesh_as_dot(mesh):
             {% if "resource" in conn %}
             {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash_p }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
             {% elif "domain_export" in conn %}
-                {% if conn.domain_export == needs %}
-                {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }} [color="grey"];
-                {% else %}
-                {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash_p }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }} [color="grey"];
-                {% endif %}
+            {% if conn.domain_export == "needs" %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }} [color="grey",arrowhead="dot"];
+            {% else %}
+            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash_p }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }} [color="grey",dir="back",arrowtail="dot"];
+            {% endif %}
             {% else %}
             {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }}{% if conn.highlighted %}[color="red"]{% endif %};
             {% endif %}

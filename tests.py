@@ -1153,7 +1153,6 @@ class MeshTest(unittest.TestCase):
         }, m.as_dict())
 
 
-
 class RenderTest(unittest.TestCase):
 
     JSON_TEMPLATE = '''
