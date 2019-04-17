@@ -62,7 +62,7 @@ When visualised using Graphviz, this should produce an output that looks like:
 
 """
 __author__ = "Shawn Chin"
-__version__ = "v1.2.0"
+__version__ = "v1.2.1"
 
 import re
 import hashlib
