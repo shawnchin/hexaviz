@@ -607,18 +607,22 @@ DOT_TEMPLATE = textwrap.dedent('''
         </TR>
         <TR>
             <TD>
+                {% if component.provides_ports %}
                 <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
                 {% for port in component.provides_ports %}
                 <TR><TD PORT="{{ port|hash_p }}" BGCOLOR="grey">{{ port|escape }}</TD></TR>
                 {% endfor %}
                 </TABLE>
+                {% else %}&nbsp;{% endif %}
             </TD>
             <TD>
+                {% if component.needs_ports %}
                 <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
                 {% for port in component.needs_ports %}
                 <TR><TD PORT="{{ port|hash }}" BGCOLOR="grey">{{ port|escape }}</TD></TR>
                 {% endfor %}
                 </TABLE>
+                {% else %}&nbsp;{% endif %}
             </TD>
         </TR>
         
