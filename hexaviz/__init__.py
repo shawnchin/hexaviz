@@ -62,7 +62,7 @@ When visualised using Graphviz, this should produce an output that looks like:
 
 """
 __author__ = "Shawn Chin"
-__version__ = "v1.2.0"
+__version__ = "v1.2.1"
 
 import re
 import hashlib
@@ -593,10 +593,101 @@ def render(mesh, template, custom_filters=None):
     return jinja_template.render(mesh.as_dict())
 
 
-def render_mesh_as_dot(mesh):
+DOT_TEMPLATE = textwrap.dedent('''
+    digraph G {
+
+        rankdir=LR;
+        node [shape=plaintext];
+
+        {% for component in components %}
+        {{ component.name|hash }} [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4"{% if component.highlighted %} BGCOLOR="yellow"{% endif %}>
+        <TR>
+            <TD COLSPAN="2"> {{ component.name|escape }}</TD>
+        </TR>
+        <TR>
+            <TD>
+                {% if component.provides_ports %}
+                <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
+                {% for port in component.provides_ports %}
+                <TR><TD PORT="{{ port|hash_p }}" BGCOLOR="grey">{{ port|escape }}</TD></TR>
+                {% endfor %}
+                </TABLE>
+                {% else %}&nbsp;{% endif %}
+            </TD>
+            <TD>
+                {% if component.needs_ports %}
+                <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
+                {% for port in component.needs_ports %}
+                <TR><TD PORT="{{ port|hash }}" BGCOLOR="grey">{{ port|escape }}</TD></TR>
+                {% endfor %}
+                </TABLE>
+                {% else %}&nbsp;{% endif %}
+            </TD>
+        </TR>
+        
+        </TABLE>>];
+        {% endfor %}
+
+        {% for domain in domains %}
+        subgraph cluster_domain_{{ domain.name|hash }} {
+            label="{{ domain.name }}";
+            style="rounded";
+            rank=same;
+
+            {% if domain.provides_ports %}
+            {{ domain.label_for_provides|hash }} [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="4" CELLPADDING="4">
+                {% for port in domain.provides_ports %}
+                <TR><TD PORT="{{ port|hash_p }}" BGCOLOR="lightgrey">{{ port|escape }}</TD></TR>
+                {% endfor %}
+            </TABLE>>];
+            {% endif %}
+
+            subgraph cluster_domain_{{ domain.name|hash }}_services {
+                style="rounded,dashed";
+                label="";
+
+                {% for child in domain.children %}
+                {{ child|hash }};
+                {% endfor %}
+            }
+            
+            {% if domain.needs_ports %}
+            {{ domain.label_for_needs|hash }} [label=<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="4" CELLPADDING="4">
+                {% for port in domain.needs_ports %}
+                <TR><TD PORT="{{ port|hash }}" BGCOLOR="lightgrey">{{ port|escape }}</TD></TR>
+                {% endfor %}
+            </TABLE>>];
+            {% endif %}
+        }
+        {% endfor %}
+
+        {% for resource in resources %}
+        {{ resource|hash_p }} [shape="rect";label="{{ resource }}", style="dashed"{% if resource in highlighted_resources %}, color="red"{% endif %}];
+        {% endfor %}
+
+        {% for conn in connections %}
+        {% if "resource" in conn %}
+        {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash_p }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
+        {% elif "domain_export" in conn %}
+        {% if conn.domain_export == "needs" %}
+        {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }} [color="grey",arrowhead="dot"];
+        {% else %}
+        {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash_p }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }} [color="grey",dir="back",arrowtail="dot"];
+        {% endif %}
+        {% else %}
+        {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }}{% if conn.highlighted %}[color="red"]{% endif %};
+        {% endif %}
+        {% endfor %}
+    }
+''').lstrip()
+
+
+def render_mesh_as_dot(mesh, template=DOT_TEMPLATE):
     """Renders the given mesh in the Graphviz dot format.
 
     :param Mesh mesh: the mesh to be rendered
+    :param str template: alternative template to use
     :returns: textual dot representation of the mesh
     """
 
@@ -606,78 +697,5 @@ def render_mesh_as_dot(mesh):
         'hash_p': lambda s: "idp" + hashlib.md5(s).hexdigest()[:6],
         'escape': lambda s: re.sub(r'([{}|"<>])', r'\\\1', s),
     }
-
-    template = textwrap.dedent('''
-        digraph G {
-
-            rankdir=LR;
-            node [shape=record,style=filled];
-
-            {% for component in components %}
-            {{ component.name|hash }} [label="{{ component.name|escape }} | {
-                {
-                    {% for port in component.provides_ports %}
-                    <{{ port|hash_p }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
-                    {% endfor %}
-                }|{
-                    {% for port in component.needs_ports %}
-                    <{{ port|hash }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
-                    {% endfor %}
-                }
-            }"{% if component.highlighted %}, color="red"{% endif %}];
-            {% endfor %}
-
-            {% for domain in domains %}
-            subgraph cluster_domain_{{ domain.name|hash }} {
-                label="{{ domain.name }}";
-                style="rounded";
-                rank=same;
-
-                {% if domain.provides_ports %}
-                {{ domain.label_for_provides|hash }} [style="dashed" label="
-                    {% for port in domain.provides_ports %}
-                    <{{ port|hash_p }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
-                    {% endfor %}
-                "]
-                {% endif %}
-
-                subgraph cluster_domain_{{ domain.name|hash }}_services {
-                    style="rounded,dashed";
-                    label="";
-
-                    {% for child in domain.children %}
-                    {{ child|hash }};
-                    {% endfor %}
-                }
-                
-                {% if domain.needs_ports %}
-                {{ domain.label_for_needs|hash }} [style="dashed" label="
-                    {% for port in domain.needs_ports %}
-                    <{{ port|hash }}>{{ port|escape }}{% if not loop.last %}|{% endif %}
-                    {% endfor %}
-                "]
-                {% endif %}
-            }
-            {% endfor %}
-
-            {% for resource in resources %}
-            {{ resource|hash_p }} [label="{{ resource }}", style="dashed"{% if resource in highlighted_resources %}, color="red"{% endif %}];
-            {% endfor %}
-
-            {% for conn in connections %}
-            {% if "resource" in conn %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.resource|hash_p }} [style="dashed"{% if conn.highlighted %}, color="red"{% endif %}];
-            {% elif "domain_export" in conn %}
-            {% if conn.domain_export == "needs" %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash }} [color="grey",arrowhead="dot"];
-            {% else %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash_p }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }} [color="grey",dir="back",arrowtail="dot"];
-            {% endif %}
-            {% else %}
-            {{ conn.consumer_component|hash }}:{{ conn.consumer_port|hash }} -> {{ conn.producer_component|hash }}:{{ conn.producer_port|hash_p }}{% if conn.highlighted %}[color="red"]{% endif %};
-            {% endif %}
-            {% endfor %}
-        }
-    ''').lstrip()
 
     return render(mesh, template, custom_filters=custom_filters)
